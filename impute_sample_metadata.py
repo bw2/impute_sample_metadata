@@ -162,28 +162,31 @@ def impute_metadata(output_row):
     for column in "imputed_reference_genome", "imputed_exome_or_genome",  "imputed_sex":
         output_row[column] = "unknown"   # "hg19" or "hg38"
 
+    genome_versions = []
     for genome_version in "hg19", "hg38":
         if output_row[f"{genome_version}_exome:MISSING"] < 0.66*NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
-            output_row["imputed_reference_genome"] = genome_version   # "hg19" or "hg38"
-            break
-    else:
+            genome_versions.append(genome_version)   # "hg19" or "hg38"
+
+    if len(genome_versions) == 0 or len(genome_versions) > 1:
         print("WARNING: unable to impute reference genome version")
         return
 
-    genome_version = output_row["imputed_reference_genome"]
+    genome_version = output_row["imputed_reference_genome"] = genome_versions[0]
+
+    sample_types = []
     for sample_type in "genome", "exome":
         if output_row[f"{genome_version}_{sample_type}:MISSING"] < 0.66*NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
-            output_row["imputed_exome_or_genome"] = sample_type   # "hg19" or "hg38"
-            break
-    else:
+            sample_types.append(sample_type)
+
+    if len(sample_types) == 0 or len(sample_types) > 1:
         print("WARNING: unable to impute sample type")
         return
 
-    sample_type = output_row["imputed_exome_or_genome"]
+    sample_type = output_row["imputed_exome_or_genome"] = sample_types[0]
 
-    if output_row[f"{genome_version}_{sample_type}:HOM_ALT"] > 2 * output_row[f"{genome_version}_{sample_type}:HET"]:
+    if output_row[f"{genome_version}_{sample_type}:HOM_ALT"] > 1.5 * output_row[f"{genome_version}_{sample_type}:HET"]:
         output_row["imputed_sex"] = "male"
-    elif output_row[f"{genome_version}_{sample_type}:HET"] > 2 * output_row[f"{genome_version}_{sample_type}:HOM_ALT"]:
+    elif output_row[f"{genome_version}_{sample_type}:HET"] > 1.5 * output_row[f"{genome_version}_{sample_type}:HOM_ALT"]:
         output_row["imputed_sex"] = "female"
     else:
         print("WARNING: unable to impute sample sex")
@@ -227,9 +230,6 @@ def main():
         impute_metadata(output_row)
 
         output_rows.append(output_row)
-
-        if args.verbose:
-            pprint(output_row)
 
     # write results to .tsv
     df = pd.DataFrame(output_rows)
