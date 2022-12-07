@@ -60,12 +60,12 @@ ENV PATH=/google-cloud-sdk/bin:$PATH
 
 RUN python3 -m pip install pysam pandas tqdm
 
-ARG nocache=1
-COPY impute_sample_metadata.py /
 COPY hg19_exome.common_variants.tsv /
 COPY hg19_genome.common_variants.tsv /
 COPY hg38_exome.common_variants.tsv /
 COPY hg38_genome.common_variants.tsv /
+
+ADD impute_sample_metadata.py /
 
 ENTRYPOINT /bin/bash
 

@@ -7,9 +7,12 @@ import sys
 
 from step_pipeline import pipeline, Backend, Localize, Delocalize, all_outputs_exist
 
-DOCKER_IMAGE = "weisburd/impute_sample_metadata@sha256:265ea3358896428c258469cc522300b7b991c477ab2b3968a77cb850278b99c3"
+DOCKER_IMAGE = "weisburd/impute_sample_metadata@sha256:1e52407c5931999506a1380763bcbf0f6e7be8a70ddfc6aa0f57eafcb69bee02"
 
 OUTPUT_FILENAME_PREFIX = "imputed_sample_metadata"
+
+HG19_REFERENCE_FASTA = "gs://gcp-public-data--broad-references/hg19/v0/Homo_sapiens_assembly19.fasta"
+HG38_REFERENCE_FASTA = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 
 def parse_args(batch_pipeline):
     """Define and parse command-line args"""
@@ -138,7 +141,6 @@ def main():
             image=DOCKER_IMAGE,
             cpu=0.25,
             memory="standard",
-            output_dir=args.output_dir,
             delocalize_by=Delocalize.COPY,
         )
         s1.switch_gcloud_auth_to_user_account()
@@ -146,7 +148,9 @@ def main():
         s1.command("set -euxo pipefail")
 
         # process input files
-        cram_or_bam_input = s1.input(row_cram_or_bam_path, localize_by=Localize.HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET)
+        hg19_fasta = s1.input(HG19_REFERENCE_FASTA, localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
+        hg38_fasta = s1.input(HG38_REFERENCE_FASTA, localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
+        cram_or_bam_input = s1.input(row_cram_or_bam_path, localize_by=Localize.HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET)  # HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET
         crai_or_bai_input = s1.input(row_crai_or_bai_path, localize_by=Localize.HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET)
 
         s1.command(f"ls -lh {cram_or_bam_input}")
@@ -157,12 +161,26 @@ def main():
 
         output_tsv_path = f"/io/{OUTPUT_FILENAME_PREFIX}.{row_sample_id}.tsv"
         s1.command("cd /")
-        s1.command(f"python3 /impute_sample_metadata.py /{cram_or_bam_input.filename} --verbose -o {output_tsv_path}")
+        s1.command(f"python3 /impute_sample_metadata.py /{cram_or_bam_input.filename} "
+                   f"--hg19-fasta {hg19_fasta} "
+                   f"--hg38-fasta {hg38_fasta} "
+                   f"--verbose "
+                   f"-o {output_tsv_path}")
 
+        # add cram path column
+        s1.command(f"""python3 << CODE
+import pandas as pd
+df = pd.read_table('{output_tsv_path}')
+df.loc[:, 'cram_path'] = '{row_cram_or_bam_path}'
+df.to_csv('{output_tsv_path}', sep='\t', index=False, header=True)
+CODE
+""")
+        s1.command(f"cat {output_tsv_path}")
         s1.command("ls")
 
         # delocalize the output tsv
-        s1.output(output_tsv_path, delocalize_by=Delocalize.COPY)
+        destination_dir = os.path.join(args.output_dir, os.path.dirname(row_cram_or_bam_path).replace("gs://", ""))
+        s1.output(output_tsv_path, destination_dir)
         steps.append(s1)
 
     # step2: combine tables from step1 into a single table
@@ -198,11 +216,11 @@ def main():
     # download the output table from step2 and merge it with the input table given to this pipeline.
     os.system(f"gsutil -m cp {os.path.join(args.output_dir, combined_output_tsv_filename)} .")
     result_df = pd.read_table(combined_output_tsv_filename)
-    result_df.loc[:, "sample_id_or_filename"] = result_df.sample_id.where(
-        result_df.sample_id.isin(set(df[args.sample_id_column])), result_df.filename)
+    result_df.loc[:, "sample_id_or_filename_prefix"] = result_df.sample_id.where(
+        result_df.sample_id.isin(set(df[args.sample_id_column])), result_df.filename_prefix)
 
     df = df.drop_duplicates(subset=[args.sample_id_column], keep="first")
-    df_with_metadata = pd.merge(result_df, df, how="left", left_on="sample_id_or_filename", right_on=args.sample_id_column)
+    df_with_metadata = pd.merge(result_df, df, how="left", left_on="cram_path", right_on=args.cram_or_bam_path_column)
     df_with_metadata.to_csv(combined_output_tsv_filename, sep="\t", header=True, index=False)
     print(f"Wrote {len(df_with_metadata)} rows to {combined_output_tsv_filename}")
 
