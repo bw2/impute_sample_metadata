@@ -7,7 +7,7 @@ import sys
 
 from step_pipeline import pipeline, Backend, Localize, Delocalize, all_outputs_exist
 
-DOCKER_IMAGE = "weisburd/impute_sample_metadata@sha256:43e044e766a09e086ee21c099a1fc88f5ce0fef9b9372ac25efdf2d535112251"
+DOCKER_IMAGE = "weisburd/impute_sample_metadata@sha256:827778ff439e1c2a0acad3e665850eea5a9efc0e0fbe146eee60afcc472d7806"
 
 OUTPUT_FILENAME_PREFIX = "imputed_sample_metadata"
 

@@ -128,7 +128,7 @@ def count_nucleotides_at_position(alignment_file, chrom, pos_1based):
             if base in nucleotide_counts:
                 nucleotide_counts[base] += 1
             else:
-                raise ValueError(f"Unexpected base '{base}' found at {chrom}:{pos_1based}")
+                print(f"WARNING: Unexpected base '{base}' found at {chrom}:{pos_1based}")
         break
 
     return nucleotide_counts
