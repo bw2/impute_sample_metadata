@@ -94,6 +94,14 @@ def count_nucleotides_at_position(alignment_file, chrom, pos_1based):
 
     pos_0based = pos_1based - 1
     nucleotide_counts = {"A": 0, "C": 0, "G": 0, "T": 0}
+
+    # handle chr prefix
+    chrom = chrom.replace("chr", "")
+    if f"chr{chrom}" in alignment_file.references:
+        chrom = f"chr{chrom}"
+    elif chrom not in alignment_file.references:
+        raise ValueError(f"Chromosome not found: {chrom}")
+
     for pileup_column in alignment_file.pileup(
             region=f"{chrom}:{pos_0based}-{pos_1based}",
             stepper="samtools",
@@ -190,15 +198,14 @@ def impute_metadata(output_row):
         if output_row[f"{genome_version}_exome:MISSING"] < 0.66 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
             genome_versions.append(genome_version)   # "hg19" or "hg38"
 
-    imputed_genome_version = genome_versions[0] if len(genome_versions) == 1 else None
+    imputed_genome_version = genome_versions[0] if len(genome_versions) == 1 else "unknown"
 
-    if output_row.get("imputed_reference_genome") and imputed_genome_version:
+    if output_row["imputed_reference_genome"] != "unknown" and imputed_genome_version != "unknown":
         if imputed_genome_version != output_row["imputed_reference_genome"]:
             print(f"WARNING: imputed reference genome from file header (", output_row["imputed_reference_genome"], ")",
-                "doesn't match imputed reference genome based on common SNVs (", imputed_genome_version, "). Will use "
-                "the one from the file header.")
+                "doesn't match imputed reference genome based on common SNVs (", imputed_genome_version, ").")
         genome_version = output_row["imputed_reference_genome"]
-    elif imputed_genome_version:
+    elif imputed_genome_version != "unknown":
         genome_version = output_row["imputed_reference_genome"] = imputed_genome_version
     else:
         print("WARNING: unable to impute reference genome version")
@@ -264,7 +271,6 @@ def main():
                     variants = tqdm.tqdm(variants, unit=" common variants")
                 for variant in variants:
                     chrom, pos, ref, alt = variant.split("-")
-                    chrom = "chr" + chrom.replace("chr", "")
                     nucleotide_counts = count_nucleotides_at_position(alignment_file, chrom, int(pos))
                     genotype = compute_het_hom_or_missing(ref, nucleotide_counts)
                     sample_genotype_counters[f"{label} {genotype}"] += 1

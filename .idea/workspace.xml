@@ -23,7 +23,6 @@
   </component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$PROJECT_DIR$/docker/Dockerfile" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/docker/Makefile" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -61,7 +60,7 @@
       <updated>1670117042375</updated>
       <workItem from="1670117044018" duration="5851000" />
       <workItem from="1670202170131" duration="9773000" />
-      <workItem from="1670332986421" duration="19580000" />
+      <workItem from="1670332986421" duration="21425000" />
     </task>
     <servers />
   </component>
