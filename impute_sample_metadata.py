@@ -193,12 +193,10 @@ def impute_metadata(output_row):
         if not output_row.get(column):
             output_row[column] = "unknown"   # "hg19" or "hg38"
 
-    genome_versions = []
-    for genome_version in "hg19", "hg38":
-        if output_row[f"{genome_version}_exome:MISSING"] < 0.66 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
-            genome_versions.append(genome_version)   # "hg19" or "hg38"
-
-    imputed_genome_version = genome_versions[0] if len(genome_versions) == 1 else "unknown"
+    if output_row[f"hg38_exome:HET_OR_HOM_ALT"] > 0.15 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
+        imputed_genome_version = "hg38"   # "hg19" or "hg38"
+    else:
+        imputed_genome_version = "hg19"   # "hg19" or "hg38"
 
     if output_row["imputed_reference_genome"] != "unknown" and imputed_genome_version != "unknown":
         if imputed_genome_version != output_row["imputed_reference_genome"]:
@@ -211,13 +209,10 @@ def impute_metadata(output_row):
         print("WARNING: unable to impute reference genome version")
         return
 
-    if output_row[f"{genome_version}_genome:HET_OR_HOM_ALT"] > 0.15 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
-        sample_type = "genome"
-    elif output_row[f"{genome_version}_exome:HET_OR_HOM_ALT"] > 0.15 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
+    if output_row[f"{genome_version}_genome:MISSING"] > 0.5 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
         sample_type = "exome"
     else:
-        print("WARNING: unable to impute sample type")
-        return
+        sample_type = "genome"
 
     output_row["imputed_exome_or_genome"] = sample_type
 
