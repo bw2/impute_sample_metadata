@@ -19,7 +19,7 @@ def parse_args(batch_pipeline):
 
     arg_parser = batch_pipeline.get_config_arg_parser()
     group = arg_parser.add_argument_group("imputed_sample_metadata general settings")
-    group.add_argument("-o", "--output-dir", default="gs://bw-proj/impute_sample_metdata",
+    group.add_argument("-o", "--output-dir", default="gs://bw-proj/impute_sample_metadata",
         help="Output directory where to copy the imputed_sample_metadata output .tsv file(s).")
     group.add_argument("-s", "--sample-id", action="append",
         help="If specified, only this sample id will be processed from the input table (useful for testing).")
@@ -150,8 +150,11 @@ def main():
         # process input files
         hg19_fasta = s1.input(HG19_REFERENCE_FASTA, localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
         hg38_fasta = s1.input(HG38_REFERENCE_FASTA, localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
-        cram_or_bam_input = s1.input(row_cram_or_bam_path, localize_by=Localize.HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET)  # HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET
-        crai_or_bai_input = s1.input(row_crai_or_bai_path, localize_by=Localize.HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET)
+    
+        #cram_or_bam_input = s1.input(row_cram_or_bam_path, localize_by=Localize.HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET)  # HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET
+        #crai_or_bai_input = s1.input(row_crai_or_bai_path, localize_by=Localize.HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET)
+        cram_or_bam_input = s1.input(row_cram_or_bam_path, localize_by=Localize.HAIL_BATCH_CLOUDFUSE)  # HAIL_BATCH_CLOUDFUSE_VIA_TEMP_BUCKET
+        crai_or_bai_input = s1.input(row_crai_or_bai_path, localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
 
         s1.command(f"ls -lh {cram_or_bam_input}")
 
@@ -179,7 +182,7 @@ CODE
         s1.command("ls")
 
         # delocalize the output tsv
-        destination_dir = os.path.join(args.output_dir, os.path.dirname(row_cram_or_bam_path).replace("gs://", ""))
+        destination_dir = os.path.join(args.output_dir, os.path.dirname(row_cram_or_bam_path).replace("gs://", ""), os.path.basename(output_tsv_path))
         s1.output(output_tsv_path, destination_dir)
         steps.append(s1)
 
