@@ -1,5 +1,5 @@
-"""This hail query script computes lists of common variants on chrX for hg38 and hg19 in exome and genome callsets.
-These variants are later used for imputing the reference version and sample type for unkown samples.
+"""This hail query script computes lists of common variants for hg38 and hg19 in exome and genome callsets.
+These variants are later used to impute the reference version and sample type (exome or genome) of unknown samples.
 """
 
 import os
@@ -19,9 +19,9 @@ def get_sites(ht, label, previous_sites, max_loci=1000):
         previous_sites: A collection of sites to exclude from the results list.
         max_loci (int): The maximum number of loci to return.
     Return:
-        list: strings representing common variants on chrX like ["chrX-12345-A-G", ...]
+        list: strings representing common variants like ["chrX-12345-A-G", ...]
     """
-    ht = ht.filter(ht.locus.in_x_nonpar(), keep=True)
+    #ht = ht.filter(ht.locus.in_x_nonpar(), keep=True)
 
     ht = ht.checkpoint(f"gs://bw2-delete-after-5-days/{label}.ht", overwrite=False, _read_if_exists=True)
 
@@ -32,10 +32,10 @@ def get_sites(ht, label, previous_sites, max_loci=1000):
         (ht.AF < 0.7) &
         (ht.AN > 0.5 * mean_AN), keep=True)
 
-    print("Found", ht.count(), "common variant sites on chrX in", label)
+    print("Found", ht.count(), "common variant sites in", label)
 
     ht = ht.select(variant=hl.str("-").join([
-        ht.locus.contig, hl.str(ht.locus.position), ht.alleles[0], ht.alleles[1]
+        ht.locus.contig, hl.str(ht.locus.position), ht.alleles[0], ht.alleles[1],
     ]))
     if len(previous_sites) > 0:
         ht = ht.filter(hl.set(previous_sites).contains(ht.variant), keep=False)

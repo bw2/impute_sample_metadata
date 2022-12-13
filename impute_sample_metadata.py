@@ -1,7 +1,7 @@
 #!/usr/env python3
 
-"""This script takes a CRAM or BAM file and imputes the reference genome, whether it's an exome or a genome, and
-the sample sex by computing the genotypes of commmon SNVs on the X chromosome.
+"""This script takes a CRAM or BAM file and imputes the reference genome and sample type (exome or genome)
+by computing the genotypes of common SNVs on the X chromosome.
 """
 import argparse
 import collections
@@ -63,20 +63,28 @@ def parse_args():
     return args
 
 
-def get_genome_version_from_bam_or_cram_header(bam_or_cram_path, verbose=False):
+def get_genome_version_and_sample_type_from_bam_or_cram_header(bam_or_cram_path, verbose=False):
     # get genome version from file header
-    output = subprocess.check_output(
-        f"samtools view -H {bam_or_cram_path} | grep @SQ | head -n 3", shell=True, encoding="UTF-8", stderr=subprocess.DEVNULL)
+    header_text = subprocess.check_output(
+        f"samtools view -H {bam_or_cram_path}", shell=True, encoding="UTF-8", stderr=subprocess.DEVNULL)
     genome_version = None
-    if "AS:GRCh37" in output or "Homo_sapiens_assembly19.fasta" in output:
-        genome_version = 37
-    elif "AS:GRCh38" in output or "Homo_sapiens_assembly38.fasta" in output:
+    if "AS:GRCh37" in header_text or "Homo_sapiens_assembly19.fasta" in header_text:
+        genome_version = 19
+    elif "AS:GRCh38" in header_text or "Homo_sapiens_assembly38.fasta" in header_text:
         genome_version = 38
     else:
         if verbose:
-            print(f"WARNING: unable to determine genome version from {bam_or_cram_path} file header: {output}")
+            print(f"WARNING: unable to determine genome version from {bam_or_cram_path} file header: {header_text}")
 
-    return genome_version
+    header_text = header_text.lower()
+    if "exome" in header_text:
+        sample_type = "exome"
+    elif "genome" in header_text:
+        sample_type = "genome"
+    else:
+        sample_type = None
+    
+    return genome_version, sample_type
 
 
 def count_nucleotides_at_position(alignment_file, chrom, pos_1based):
@@ -189,22 +197,21 @@ def impute_metadata(output_row):
     Args:
         output_row (dict): dictionary of fields to be written to the .tsv output row for the current sample
     """
-    for column in "imputed_reference_genome", "imputed_exome_or_genome",  "imputed_sex":
+    for column in "imputed_reference_genome", "imputed_sample_type":  # ,  "imputed_sex"
         if not output_row.get(column):
             output_row[column] = "unknown"   # "hg19" or "hg38"
 
     if output_row[f"hg38_exome:HET_OR_HOM_ALT"] > 0.15 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
-        imputed_genome_version = "hg38"   # "hg19" or "hg38"
+        genome_version = output_row["imputed_reference_genome"] = "hg38"   # "hg19" or "hg38"
     else:
-        imputed_genome_version = "hg19"   # "hg19" or "hg38"
+        genome_version = output_row["imputed_reference_genome"] = "hg19"   # "hg19" or "hg38"
 
-    if output_row["imputed_reference_genome"] != "unknown" and imputed_genome_version != "unknown":
-        if imputed_genome_version != output_row["imputed_reference_genome"]:
-            print(f"WARNING: imputed reference genome from file header (", output_row["imputed_reference_genome"], ")",
-                "doesn't match imputed reference genome based on common SNVs (", imputed_genome_version, ").")
-        genome_version = output_row["imputed_reference_genome"]
-    elif imputed_genome_version != "unknown":
-        genome_version = output_row["imputed_reference_genome"] = imputed_genome_version
+    if output_row["reference_genome_in_header"] != "unknown" and output_row["imputed_reference_genome"] != "unknown":
+        if output_row["reference_genome_in_header"] != output_row["imputed_reference_genome"]:
+            print(f"WARNING: reference genome in file header (", output_row["reference_genome_in_header"],
+                ") doesn't match imputed reference genome based on common SNVs (",
+                output_row["reference_genome_in_header"], ").")
+        genome_version = output_row["reference_genome_in_header"]
     else:
         print("WARNING: unable to impute reference genome version")
         return
@@ -214,15 +221,15 @@ def impute_metadata(output_row):
     else:
         sample_type = "genome"
 
-    output_row["imputed_exome_or_genome"] = sample_type
+    output_row["imputed_sample_type"] = sample_type
 
-    if output_row[f"{genome_version}_exome:HET"] < 0.15 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
-        output_row["imputed_sex"] = "male"
-    elif output_row[f"{genome_version}_exome:HET"] > 0.25 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
-        output_row["imputed_sex"] = "female"
-    else:
-        print("WARNING: unable to impute sample sex")
-        return
+    #if output_row[f"{genome_version}_exome:HET"] < 0.15 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
+    #    output_row["imputed_sex"] = "male"
+    #elif output_row[f"{genome_version}_exome:HET"] > 0.25 * NUM_VARIANTS_NEEDED_FOR_IMPUTATION:
+    #    output_row["imputed_sex"] = "female"
+    #else:
+    #    print("WARNING: unable to impute sample sex")
+    #    return
 
 
 def main():
@@ -240,21 +247,30 @@ def main():
         output_row = {}
         output_row["filename_prefix"], output_row["file_type"] = get_filename_prefix_and_file_type(cram_or_bam_path)
 
+        genome_version, sample_type = get_genome_version_and_sample_type_from_bam_or_cram_header(
+            cram_or_bam_path, verbose=args.verbose)
+
+        if genome_version is not None:
+            print(f"Parsed genome version hg{genome_version} from file header: {cram_or_bam_path}")
+            output_row["reference_genome_in_header"] = f"hg{genome_version}"
+        else:
+            print(f"Couldn't parse genome version from file header: {cram_or_bam_path}")
+            output_row["reference_genome_in_header"] = f"unknown"
+
         reference_fasta = None
-        if cram_or_bam_path.endswith(".cram") and (args.hg19_fasta or args.hg38_fasta):
-            reference_version = get_genome_version_from_bam_or_cram_header(
-                cram_or_bam_path, verbose=args.verbose)
-            if reference_version is not None:
-                output_row["imputed_reference_genome"] = f"hg{reference_version}"
-                print(f"Imputed genome version hg{reference_version} from CRAM file header: {cram_or_bam_path}")
-            else:
-                print(f"Couldn't impute genome version from CRAM file header: {cram_or_bam_path}")
-                
-            if reference_version == 38:
+        if genome_version is not None and cram_or_bam_path.endswith(".cram") and (args.hg19_fasta or args.hg38_fasta):
+            if genome_version == 38:
                 reference_fasta = args.hg38_fasta
-            elif reference_version == 19:
+            elif genome_version == 19:
                 reference_fasta = args.hg19_fasta
 
+        if sample_type is not None:
+            print(f"Parsed sample_type '{sample_type}' from file header: {cram_or_bam_path}")
+            output_row["sample_type_in_header"] = sample_type
+        else:
+            print(f"Couldn't parse sample_type from file header: {cram_or_bam_path}")
+            output_row["sample_type_in_header"] = f"unknown"    
+            
         sample_genotype_counters = collections.defaultdict(int)
         print(f"Reading {cram_or_bam_path} (using reference: {reference_fasta})")
         with pysam.AlignmentFile(cram_or_bam_path, reference_filename=reference_fasta) as alignment_file:

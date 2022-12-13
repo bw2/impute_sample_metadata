@@ -7,7 +7,7 @@ import sys
 
 from step_pipeline import pipeline, Backend, Localize, Delocalize, all_outputs_exist
 
-DOCKER_IMAGE = "weisburd/impute_sample_metadata@sha256:827778ff439e1c2a0acad3e665850eea5a9efc0e0fbe146eee60afcc472d7806"
+DOCKER_IMAGE = "weisburd/impute_sample_metadata@sha256:9cd73f4253079782d8a7352bed7088c73c3d868194e8a41f93eb0d9261096e22"
 
 OUTPUT_FILENAME_PREFIX = "imputed_sample_metadata"
 
@@ -28,10 +28,10 @@ def parse_args(batch_pipeline):
 
     group.add_argument("sample_table",
         help="Path of tab-delimited table containing sample ids along with their BAM or CRAM file paths "
-                        "and other metadata. The table should contain at least the following columns: "
-                        "'sample_id' or 'individual_id', "
-                        "'cram_path' or 'bam_path' or 'reads', "
-                        "'bai_path' or 'crai_path' or 'index'. ")
+             "and other metadata. The table should contain at least the following columns: "
+             "'sample_id' or 'individual_id', "
+             "'cram_path' or 'bam_path' or 'reads', "
+             "'bai_path' or 'crai_path' or 'index'. ")
 
     group.add("--sample-id-column",
               help="Optionally specify the name of input table column that contains the sample id")
@@ -196,6 +196,7 @@ CODE
         delocalize_by=Delocalize.COPY,
         arg_suffix="step2",
     )
+    s2.regions("us-central1")
     s2.command("set -euxo pipefail")
 
     combined_output_tsv_filename = f"combined_results.{len(df)}_samples.{analysis_id}.tsv"
